@@ -879,7 +879,10 @@ func NewNodeWithContext(ctx context.Context,
 	}
 
 	csMetrics, p2pMetrics, memplMetrics, smMetrics, abciMetrics := metricsProvider(genDoc.ChainID)
-
+	/*
+	 * 20240517
+	 * Scalaris: Remove connection to consensus component
+	 */
 	// Create the proxyApp and establish connections to the ABCI app (consensus, mempool, query).
 	proxyApp, err := createAndStartProxyAppConns(clientCreator, logger, abciMetrics)
 	if err != nil {
@@ -946,6 +949,10 @@ func NewNodeWithContext(ctx context.Context,
 
 	logNodeStartupInfo(state, pubKey, logger, consensusLogger)
 
+	/*
+	* 20240517
+	* Scalaris: Modify mempool, mempoolReactor -> scalarisClient for listen input transactions
+	 */
 	mempool, mempoolReactor := createMempoolAndMempoolReactor(config.CometConfig, proxyApp, state, memplMetrics, logger)
 
 	evidenceReactor, evidencePool, err := createEvidenceReactor(config.CometConfig, dbProvider, stateDB, blockStore, logger)
@@ -953,7 +960,14 @@ func NewNodeWithContext(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-
+	/*
+	* 20240517
+	* Scalaris: Remove block executor component in the execution.go
+	* Block is apply by call commited in this component by call method on blockExecutor
+	* consensusState.finalizeCommit -> blockExecutor.ApplyBlock ->  execBlockOnProxyApp
+	* finialize by statement res, err := blockExec.proxyApp.CommitSync()
+	* Need implement this logic to handle ouput from consensus layer somewhere
+	 */
 	// make block executor for consensus and blockchain reactors to execute blocks
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
@@ -983,7 +997,12 @@ func NewNodeWithContext(ctx context.Context,
 	} else if blockSync {
 		csMetrics.BlockSyncing.Set(1)
 	}
-
+	/*
+	 * 20240517
+	 * Scalaris: Remove consensusReactor component
+	 * main method of consensus is consensusState.receiveRoutine
+	 * block is commit when it receive enough votes, handled by consensusState.addVote
+	 */
 	consensusReactor, consensusState := createConsensusReactor(
 		config.CometConfig, state, blockExec, blockStore, mempool, evidencePool,
 		privValidator, csMetrics, stateSync || blockSync, eventBus, consensusLogger,
@@ -1009,6 +1028,11 @@ func NewNodeWithContext(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+
+	/*
+	 * 20240517
+	 * Scalaris: Remove transport and p2p component
+	 */
 
 	transport, peerFilters := createTransport(config.CometConfig, nodeInfo, nodeKey, proxyApp)
 
@@ -1229,6 +1253,11 @@ func (n *Node) OnStop() {
 	}
 }
 
+/*
+ * 20240517
+ * Scalaris: Set environments for rpc handlers
+ * Call Mempool.CheckTx to handle method BroadcastTxCommit
+ */
 // ConfigureRPC makes sure RPC has all the objects it needs to operate.
 func (n *Node) ConfigureRPC() error {
 	pubKey, err := n.privValidator.GetPubKey()
