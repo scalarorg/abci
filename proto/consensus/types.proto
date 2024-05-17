@@ -1,0 +1,12 @@
+syntax = "proto3";
+package scalaris.consensus;
+option go_package = "github.com/scalarorg/cometbft/scalaris/api/consensus";
+
+message ExternalTransaction {
+    string namespace = 1;   //Namespace used to classify services
+    bytes tx_bytes = 2;     //Transaction hash or some raw data 
+}
+
+message CommitedTransactions {
+    repeated ExternalTransaction transactions = 1;
+}

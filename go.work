@@ -1,0 +1,8 @@
+go 1.22.2
+
+use (
+	.
+	./cometbft
+)
+
+// replace github.com/cometbft/cometbft@v0.37.4 => ./cometbft

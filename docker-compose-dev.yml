@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  abci-dev:
+    container_name: abci-dev
+    image: "golang:1.22.3-bookworm"
+    ports:
+      - "26657:26657"
+      - "26660:26660"
+    environment:
+      - ID=0
+      - LOG=${LOG:-scalaris.log}
+    entrypoint: "sleep infinity"
+    working_dir: "/abci"
+    volumes:
+      - ./:/abci
+      - ./start.sh:/usr/bin/start.sh

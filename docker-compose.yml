@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  scalaris:
+    container_name: scalaris-client
+    image: "scalaris/abci"
+    ports:
+      - "26657:26657"
+      - "26660:26660"
+    environment:
+      - ID=0
+      - LOG=${LOG:-scalaris.log}
+    entrypoint: "/usr/bin/start.sh"
+    command: ["node"]
+    volumes:
+      - ./build/scalaris:/usr/local/bin/scalaris:Z
+      - ./start.sh:/usr/bin/start.sh

@@ -1,0 +1,10 @@
+syntax = "proto3";
+package scalaris.consensus;
+
+import "proto/consensus/types.proto";
+
+option go_package = "github.com/scalarorg/cometbft/scalaris/api/consensus";
+
+service ConsensusApi {
+   rpc InitTransaction(stream ExternalTransaction) returns (stream CommitedTransactions) {}
+}
