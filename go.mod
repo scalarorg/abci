@@ -17,6 +17,7 @@ require (
 )
 
 require (
+	cosmossdk.io/api v0.7.5
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.3 // indirect
@@ -94,3 +95,5 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+require github.com/cosmos/cosmos-proto v1.0.0-beta.3 // indirect

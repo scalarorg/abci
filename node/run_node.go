@@ -14,9 +14,8 @@ import (
 )
 
 var (
-	cometBFTConfig = cfg.DefaultConfig()
-	scalarisConfig = DefaultConfig()
-	logger         = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	config = DefaultConfig()
+	logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 )
 
 var genesisHash []byte
@@ -28,7 +27,7 @@ func AddNodeFlags(cmd *cobra.Command) {
 	// abci flags
 	cmd.Flags().String(
 		"sclaris_addr",
-		scalarisConfig.ScalarisAddr,
+		config.ScalarisAddr,
 		"scalaris server address")
 	//cmd.Flags().String("abci", cometBFTConfig.ABCI, "specify abci transport (socket | grpc)")
 }
@@ -57,11 +56,11 @@ func NewRunNodeCmd(nodeProvider Provider) *cobra.Command {
 		Aliases: []string{"node", "run"},
 		Short:   "Run the scalaris Connector",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := checkGenesisHash(cometBFTConfig); err != nil {
+			if err := checkGenesisHash(config.CometConfig); err != nil {
 				return err
 			}
 
-			n, err := nodeProvider(cometBFTConfig, scalarisConfig, logger)
+			n, err := nodeProvider(config, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create node: %w", err)
 			}
