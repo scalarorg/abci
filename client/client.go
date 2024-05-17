@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/libs/service"
 	cmtsync "github.com/cometbft/cometbft/libs/sync"
 	"github.com/scalarorg/abci/api/proto/consensus"
@@ -26,6 +25,10 @@ type Client interface {
 	service.Service
 
 	InitTransaction(ctx context.Context) (consensus.ConsensusApi_InitTransactionClient, error)
+
+	EchoAsync(msg string) *ReqRes
+
+	EchoSync(msg string) (*consensus.ResponseEcho, error)
 }
 
 // ----------------------------------------
@@ -44,12 +47,12 @@ type Client interface {
 // 	return client, err
 // }
 
-type Callback func(*types.Request, *types.Response)
+type Callback func(*consensus.Request, *consensus.Response)
 
 type ReqRes struct {
-	*types.Request
+	*consensus.Request
 	*sync.WaitGroup
-	*types.Response // Not set atomically, so be sure to use WaitGroup.
+	*consensus.Response // Not set atomically, so be sure to use WaitGroup.
 
 	mtx cmtsync.Mutex
 
@@ -59,10 +62,10 @@ type ReqRes struct {
 	// invoking the callback twice by accident, once when 'SetCallback' is
 	// called and once during the normal request.
 	callbackInvoked bool
-	cb              func(*types.Response) // A single callback that may be set.
+	cb              func(*consensus.Response) // A single callback that may be set.
 }
 
-func NewReqRes(req *types.Request) *ReqRes {
+func NewReqRes(req *consensus.Request) *ReqRes {
 	return &ReqRes{
 		Request:   req,
 		WaitGroup: waitGroup1(),
@@ -76,7 +79,7 @@ func NewReqRes(req *types.Request) *ReqRes {
 // Sets sets the callback. If reqRes is already done, it will call the cb
 // immediately. Note, reqRes.cb should not change if reqRes.done and only one
 // callback is supported.
-func (r *ReqRes) SetCallback(cb func(res *types.Response)) {
+func (r *ReqRes) SetCallback(cb func(res *consensus.Response)) {
 	r.mtx.Lock()
 
 	if r.callbackInvoked {
@@ -107,7 +110,7 @@ func (r *ReqRes) InvokeCallback() {
 // will invoke the callback twice and create a potential race condition.
 //
 // ref: https://github.com/tendermint/tendermint/issues/5439
-func (r *ReqRes) GetCallback() func(*types.Response) {
+func (r *ReqRes) GetCallback() func(*consensus.Response) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 	return r.cb

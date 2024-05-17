@@ -863,7 +863,6 @@ func NewNodeWithContext(ctx context.Context,
 	logger log.Logger,
 	options ...Option,
 ) (*Node, error) {
-
 	blockStore, stateDB, err := initDBs(config.CometConfig, dbProvider)
 	if err != nil {
 		return nil, err
@@ -879,6 +878,25 @@ func NewNodeWithContext(ctx context.Context,
 	}
 
 	csMetrics, p2pMetrics, memplMetrics, smMetrics, abciMetrics := metricsProvider(genDoc.ChainID)
+
+	// Scalaris client
+	logger.Info("Starting scalar consensus client", "addr", config.ScalarisAddr)
+	config.ScalarisAddr = "tcp://192.168.1.254:8081"
+	if config.ScalarisAddr != "" {
+
+		scalarisClient := sclient.NewGRPCClient(config.ScalarisAddr, true)
+
+		logger.Info("Starting scalar consensus client")
+		errr := scalarisClient.Start()
+
+		if errr != nil {
+			logger.Error("Error starting scalaris client", "err", errr)
+		}
+
+		logger.Info("Started scalar consensus client")
+	} else {
+		logger.Info("Scalaris address not providedddd, skipping scalaris client start")
+	}
 
 	// Create the proxyApp and establish connections to the ABCI app (consensus, mempool, query).
 	proxyApp, err := createAndStartProxyAppConns(clientCreator, logger, abciMetrics)

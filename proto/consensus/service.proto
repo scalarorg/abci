@@ -7,4 +7,5 @@ option go_package = "github.com/scalarorg/cometbft/scalaris/api/consensus";
 
 service ConsensusApi {
    rpc InitTransaction(stream ExternalTransaction) returns (stream CommitedTransactions) {}
+   rpc Echo(RequestEcho) returns (ResponseEcho);
 }
