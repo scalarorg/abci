@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -28,10 +29,9 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	cmtpubsub "github.com/cometbft/cometbft/libs/pubsub"
 	"github.com/cometbft/cometbft/libs/service"
-
 	mempl "github.com/cometbft/cometbft/mempool"
-	mempoolv0 "github.com/cometbft/cometbft/mempool/v0"
-	mempoolv1 "github.com/cometbft/cometbft/mempool/v1" //nolint:staticcheck // SA1019 Priority mempool deprecated but still supported in this release.
+
+	//nolint:staticcheck // SA1019 Priority mempool deprecated but still supported in this release.
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/p2p/pex"
 	"github.com/cometbft/cometbft/privval"
@@ -52,6 +52,7 @@ import (
 	"github.com/cometbft/cometbft/types"
 	cmttime "github.com/cometbft/cometbft/types/time"
 	"github.com/cometbft/cometbft/version"
+	scalarismempool "github.com/scalarorg/abci/mempool"
 
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 
@@ -329,12 +330,12 @@ type Node struct {
 	isListening bool
 
 	// services
-	consensusCLient   sclient.Client
+	consensusClient   sclient.Client
 	eventBus          *types.EventBus // pub/sub for services
 	stateStore        sm.Store
-	blockStore        *store.BlockStore // store the blockchain to disk
-	bcReactor         p2p.Reactor       // for block-syncing
-	mempoolReactor    p2p.Reactor       // for gossipping transactions
+	blockStore        *store.BlockStore        // store the blockchain to disk
+	bcReactor         p2p.Reactor              // for block-syncing
+	mempoolReactor    *scalarismempool.Reactor // for gossipping transactions
 	mempool           mempl.Mempool
 	stateSync         bool                    // whether the node should state sync on startup
 	stateSyncReactor  *statesync.Reactor      // for hosting and restoring state sync snapshots
@@ -487,72 +488,100 @@ func onlyValidatorIsUs(state sm.State, pubKey crypto.PubKey) bool {
 	addr, _ := state.Validators.GetByIndex(0)
 	return bytes.Equal(pubKey.Address(), addr)
 }
-
-func createMempoolAndMempoolReactor(
+func createScalarisMempoolAndMempoolReactor(
 	config *cfg.Config,
 	proxyApp proxy.AppConns,
 	state sm.State,
 	memplMetrics *mempl.Metrics,
 	logger log.Logger,
-) (mempl.Mempool, p2p.Reactor) {
-	switch config.Mempool.Type {
-	// allow empty string for backward compatibility
-	case cfg.MempoolTypeFlood, "":
-		switch config.Mempool.Version {
-		case cfg.MempoolV1:
-			mp := mempoolv1.NewTxMempool(
-				logger,
-				config.Mempool,
-				proxyApp.Mempool(),
-				state.LastBlockHeight,
-				mempoolv1.WithMetrics(memplMetrics),
-				mempoolv1.WithPreCheck(sm.TxPreCheck(state)),
-				mempoolv1.WithPostCheck(sm.TxPostCheck(state)),
-			)
+) (mempl.Mempool, *scalarismempool.Reactor) {
+	mp := scalarismempool.NewCListMempool(
+		config.Mempool,
+		proxyApp.Mempool(),
+		state.LastBlockHeight,
+		scalarismempool.WithMetrics(memplMetrics),
+		scalarismempool.WithPreCheck(sm.TxPreCheck(state)),
+		scalarismempool.WithPostCheck(sm.TxPostCheck(state)),
+	)
 
-			reactor := mempoolv1.NewReactor(
-				config.Mempool,
-				mp,
-			)
-			if config.Consensus.WaitForTxs() {
-				mp.EnableTxsAvailable()
-			}
+	mp.SetLogger(logger)
 
-			return mp, reactor
-
-		case cfg.MempoolV0:
-			mp := mempoolv0.NewCListMempool(
-				config.Mempool,
-				proxyApp.Mempool(),
-				state.LastBlockHeight,
-				mempoolv0.WithMetrics(memplMetrics),
-				mempoolv0.WithPreCheck(sm.TxPreCheck(state)),
-				mempoolv0.WithPostCheck(sm.TxPostCheck(state)),
-			)
-
-			mp.SetLogger(logger)
-
-			reactor := mempoolv0.NewReactor(
-				config.Mempool,
-				mp,
-			)
-			if config.Consensus.WaitForTxs() {
-				mp.EnableTxsAvailable()
-			}
-
-			return mp, reactor
-
-		default:
-			return nil, nil
-		}
-	case cfg.MempoolTypeNop:
-		// Strictly speaking, there's no need to have a `mempl.NopMempoolReactor`, but
-		// adding it leads to a cleaner code.
-		return &mempl.NopMempool{}, mempl.NewNopMempoolReactor()
-	default:
-		panic(fmt.Sprintf("unknown mempool type: %q", config.Mempool.Type))
+	reactor := scalarismempool.NewReactor(
+		config.Mempool,
+		mp,
+	)
+	if config.Consensus.WaitForTxs() {
+		mp.EnableTxsAvailable()
 	}
+
+	return mp, reactor
 }
+
+// func createMempoolAndMempoolReactor(
+// 	config *cfg.Config,
+// 	proxyApp proxy.AppConns,
+// 	state sm.State,
+// 	memplMetrics *mempl.Metrics,
+// 	logger log.Logger,
+// ) (mempl.Mempool, p2p.Reactor) {
+// 	switch config.Mempool.Type {
+// 	// allow empty string for backward compatibility
+// 	case cfg.MempoolTypeFlood, "":
+// 		switch config.Mempool.Version {
+// 		case cfg.MempoolV1:
+// 			mp := mempoolv1.NewTxMempool(
+// 				logger,
+// 				config.Mempool,
+// 				proxyApp.Mempool(),
+// 				state.LastBlockHeight,
+// 				mempoolv1.WithMetrics(memplMetrics),
+// 				mempoolv1.WithPreCheck(sm.TxPreCheck(state)),
+// 				mempoolv1.WithPostCheck(sm.TxPostCheck(state)),
+// 			)
+
+// 			reactor := mempoolv1.NewReactor(
+// 				config.Mempool,
+// 				mp,
+// 			)
+// 			if config.Consensus.WaitForTxs() {
+// 				mp.EnableTxsAvailable()
+// 			}
+
+// 			return mp, reactor
+
+// 		case cfg.MempoolV0:
+// 			mp := mempoolv0.NewCListMempool(
+// 				config.Mempool,
+// 				proxyApp.Mempool(),
+// 				state.LastBlockHeight,
+// 				mempoolv0.WithMetrics(memplMetrics),
+// 				mempoolv0.WithPreCheck(sm.TxPreCheck(state)),
+// 				mempoolv0.WithPostCheck(sm.TxPostCheck(state)),
+// 			)
+
+// 			mp.SetLogger(logger)
+
+// 			reactor := mempoolv0.NewReactor(
+// 				config.Mempool,
+// 				mp,
+// 			)
+// 			if config.Consensus.WaitForTxs() {
+// 				mp.EnableTxsAvailable()
+// 			}
+
+// 			return mp, reactor
+
+// 		default:
+// 			return nil, nil
+// 		}
+// 	case cfg.MempoolTypeNop:
+// 		// Strictly speaking, there's no need to have a `mempl.NopMempoolReactor`, but
+// 		// adding it leads to a cleaner code.
+// 		return &mempl.NopMempool{}, mempl.NewNopMempoolReactor()
+// 	default:
+// 		panic(fmt.Sprintf("unknown mempool type: %q", config.Mempool.Type))
+// 	}
+// }
 
 func createEvidenceReactor(config *cfg.Config, dbProvider DBProvider,
 	stateDB dbm.DB, blockStore *store.BlockStore, logger log.Logger,
@@ -863,7 +892,6 @@ func NewNodeWithContext(ctx context.Context,
 	logger log.Logger,
 	options ...Option,
 ) (*Node, error) {
-
 	blockStore, stateDB, err := initDBs(config.CometConfig, dbProvider)
 	if err != nil {
 		return nil, err
@@ -879,6 +907,7 @@ func NewNodeWithContext(ctx context.Context,
 	}
 
 	csMetrics, p2pMetrics, memplMetrics, smMetrics, abciMetrics := metricsProvider(genDoc.ChainID)
+
 	/*
 	 * 20240517
 	 * Scalaris: Remove connection to consensus component
@@ -953,7 +982,7 @@ func NewNodeWithContext(ctx context.Context,
 	* 20240517
 	* Scalaris: Modify mempool, mempoolReactor -> scalarisClient for listen input transactions
 	 */
-	mempool, mempoolReactor := createMempoolAndMempoolReactor(config.CometConfig, proxyApp, state, memplMetrics, logger)
+	mempool, mempoolReactor := createScalarisMempoolAndMempoolReactor(config.CometConfig, proxyApp, state, memplMetrics, logger)
 
 	evidenceReactor, evidencePool, err := createEvidenceReactor(config.CometConfig, dbProvider, stateDB, blockStore, logger)
 
@@ -1083,7 +1112,16 @@ func NewNodeWithContext(ctx context.Context,
 	}
 
 	// Scalaris client
+	config.ScalarisAddr = "192.168.1.254:8081"
+	// if config.ScalarisAddr != "" {
+
+	// 	client := sclient.NewGRPCClient(config.ScalarisAddr, true)
+
+	// } else {
+	// 	logger.Info("Scalaris address not providedddd, skipping scalaris client start")
+	// }
 	client := sclient.NewGRPCClient(config.ScalarisAddr, true)
+	// Start grpc
 	node := &Node{
 		config:        config,
 		genesisDoc:    genDoc,
@@ -1094,7 +1132,7 @@ func NewNodeWithContext(ctx context.Context,
 		addrBook:         addrBook,
 		nodeInfo:         nodeInfo,
 		nodeKey:          nodeKey,
-		consensusCLient:  client,
+		consensusClient:  client,
 		stateStore:       stateStore,
 		blockStore:       blockStore,
 		bcReactor:        bcReactor,
@@ -1148,7 +1186,11 @@ func (n *Node) OnStart() error {
 		n.CometConfig().Instrumentation.PrometheusListenAddr != "" {
 		n.prometheusSrv = n.startPrometheusServer(n.CometConfig().Instrumentation.PrometheusListenAddr)
 	}
-
+	err := n.startconsensusClient()
+	if err != nil {
+		n.Logger.Error("Start consensus client with error %s", err)
+		return err
+	}
 	// Start the transport.
 	addr, err := p2p.NewNetAddressString(p2p.IDAddressString(n.nodeKey.ID(), n.CometConfig().P2P.ListenAddress))
 	if err != nil {
@@ -1432,6 +1474,45 @@ func (n *Node) startPrometheusServer(addr string) *http.Server {
 		}
 	}()
 	return srv
+}
+
+func (n *Node) startconsensusClient() error {
+	logger.Info("Starting scalar consensus client", "addr", config.ScalarisAddr)
+	err := n.consensusClient.OnStart()
+	if err != nil {
+		logger.Error("Error starting scalaris client", "err", err)
+		return err
+	} else {
+		client, err := n.consensusClient.InitTransaction(context.Background())
+		if err != nil {
+			logger.Error("Error Init transaction", "err", err)
+			return err
+		}
+		waitc := make(chan struct{})
+		//Start a routine for rebroadcast mempool transaction to consensus layer
+		go func() {
+			n.mempoolReactor.StartBroadcast(client)
+		}()
+		go func() {
+			for {
+				in, err := client.Recv()
+				if err == io.EOF {
+					// read done.
+					close(waitc)
+					return
+				}
+				if err != nil {
+					logger.Error("client.Recv commited transactions failed: %v", err)
+				}
+				txs := in.Transactions
+				logger.Info("Got commited transactions %s", txs)
+			}
+		}()
+		client.CloseSend()
+		<-waitc
+	}
+	logger.Info("Started scalar consensus client")
+	return nil
 }
 
 // Switch returns the Node's Switch.

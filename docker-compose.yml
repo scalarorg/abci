@@ -11,7 +11,7 @@ services:
       - ID=0
       - LOG=${LOG:-scalaris.log}
     entrypoint: "/usr/bin/start.sh"
-    command: ["node"]
+    command: ["node", "--scalaris_addr", "tcp://192.168.1.254:8081"]
     volumes:
       - ./build/scalaris:/usr/local/bin/scalaris:Z
       - ./start.sh:/usr/bin/start.sh

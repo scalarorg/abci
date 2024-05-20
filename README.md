@@ -13,7 +13,7 @@ make proto-gen
 ```
 
 ```
-make build-scalaris
+make build
 ```
 
 # Run docker

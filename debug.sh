@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-
-BINARY=/usr/local/bin/${BINARY:-scalaris}
+BINARY=./build/scalaris
+CMTHOME=./build
 set -e
 
 if [ ! -d "$CMTHOME/config" ]; then

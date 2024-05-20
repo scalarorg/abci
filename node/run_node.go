@@ -26,7 +26,7 @@ func AddNodeFlags(cmd *cobra.Command) {
 
 	// abci flags
 	cmd.Flags().String(
-		"sclaris_addr",
+		"scalaris_addr",
 		config.ScalarisAddr,
 		"scalaris server address")
 	//cmd.Flags().String("abci", cometBFTConfig.ABCI, "specify abci transport (socket | grpc)")
@@ -60,10 +60,14 @@ func NewRunNodeCmd(nodeProvider Provider) *cobra.Command {
 				return err
 			}
 
+			logger.Info("Starting node", "config", config)
 			n, err := nodeProvider(config, logger)
+			logger.Info("Node provider", "nodeProvider", nodeProvider)
 			if err != nil {
 				return fmt.Errorf("failed to create node: %w", err)
 			}
+
+			logger.Info("Created node", "nodeInfo", n.Switch().NodeInfo())
 
 			if err := n.Start(); err != nil {
 				return fmt.Errorf("failed to start node: %w", err)
@@ -90,6 +94,7 @@ func NewRunNodeCmd(nodeProvider Provider) *cobra.Command {
 }
 
 func checkGenesisHash(config *cfg.Config) error {
+	logger.Info("Checking genesis hash", "config", config)
 	if len(genesisHash) == 0 || config.Genesis == "" {
 		return nil
 	}

@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	ConsensusApi_InitTransaction_FullMethodName = "/scalaris.consensus.ConsensusApi/InitTransaction"
+	ConsensusApi_Echo_FullMethodName            = "/scalaris.consensus.ConsensusApi/Echo"
 )
 
 // ConsensusApiClient is the client API for ConsensusApi service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConsensusApiClient interface {
 	InitTransaction(ctx context.Context, opts ...grpc.CallOption) (ConsensusApi_InitTransactionClient, error)
+	Echo(ctx context.Context, in *RequestEcho, opts ...grpc.CallOption) (*ResponseEcho, error)
 }
 
 type consensusApiClient struct {
@@ -68,11 +70,21 @@ func (x *consensusApiInitTransactionClient) Recv() (*CommitedTransactions, error
 	return m, nil
 }
 
+func (c *consensusApiClient) Echo(ctx context.Context, in *RequestEcho, opts ...grpc.CallOption) (*ResponseEcho, error) {
+	out := new(ResponseEcho)
+	err := c.cc.Invoke(ctx, ConsensusApi_Echo_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConsensusApiServer is the server API for ConsensusApi service.
 // All implementations must embed UnimplementedConsensusApiServer
 // for forward compatibility
 type ConsensusApiServer interface {
 	InitTransaction(ConsensusApi_InitTransactionServer) error
+	Echo(context.Context, *RequestEcho) (*ResponseEcho, error)
 	mustEmbedUnimplementedConsensusApiServer()
 }
 
@@ -82,6 +94,9 @@ type UnimplementedConsensusApiServer struct {
 
 func (UnimplementedConsensusApiServer) InitTransaction(ConsensusApi_InitTransactionServer) error {
 	return status.Errorf(codes.Unimplemented, "method InitTransaction not implemented")
+}
+func (UnimplementedConsensusApiServer) Echo(context.Context, *RequestEcho) (*ResponseEcho, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Echo not implemented")
 }
 func (UnimplementedConsensusApiServer) mustEmbedUnimplementedConsensusApiServer() {}
 
@@ -122,13 +137,36 @@ func (x *consensusApiInitTransactionServer) Recv() (*ExternalTransaction, error)
 	return m, nil
 }
 
+func _ConsensusApi_Echo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestEcho)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConsensusApiServer).Echo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConsensusApi_Echo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConsensusApiServer).Echo(ctx, req.(*RequestEcho))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConsensusApi_ServiceDesc is the grpc.ServiceDesc for ConsensusApi service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ConsensusApi_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "scalaris.consensus.ConsensusApi",
 	HandlerType: (*ConsensusApiServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Echo",
+			Handler:    _ConsensusApi_Echo_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "InitTransaction",

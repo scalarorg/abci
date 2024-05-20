@@ -151,10 +151,11 @@ build-docker:
 		-f Dockerfile .
 .PHONY: build-docker
 
-docker-start: docker-stop build-docker
+docker-start: docker-stop build build-docker
 	docker-compose up -d
 .PHONY: docker-start
 
 docker-stop:
 	docker-compose down
+	docker rmi scalaris/abci
 .PHONY: docker-stop
