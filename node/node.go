@@ -880,7 +880,7 @@ func NewNodeWithContext(ctx context.Context,
 	csMetrics, p2pMetrics, memplMetrics, smMetrics, abciMetrics := metricsProvider(genDoc.ChainID)
 
 	// Scalaris client
-	config.ScalarisAddr = "tcp://192.168.1.254:8081"
+	config.ScalarisAddr = "192.168.1.254:8081"
 	if config.ScalarisAddr != "" {
 
 		scalarisClient := sclient.NewGRPCClient(config.ScalarisAddr, true)

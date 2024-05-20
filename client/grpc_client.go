@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -53,14 +55,71 @@ func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
 	return cmtnet.Connect(addr)
 }
 
+// runSendTransaction sends a bunch of transactions to the server
+func runSendTransaction(client consensus.ConsensusApiClient) {
+	println("InitTransaction start")
+	notes := []*consensus.ExternalTransaction{
+		{Namespace: "1", TxBytes: []byte("1")},
+		{Namespace: "2", TxBytes: []byte("2")},
+		{Namespace: "3", TxBytes: []byte("3")},
+		{Namespace: "4", TxBytes: []byte("4")},
+		{Namespace: "5", TxBytes: []byte("5")},
+		{Namespace: "6", TxBytes: []byte("6")},
+		{Namespace: "7", TxBytes: []byte("7")},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := client.InitTransaction(ctx)
+	println("InitTransaction end inside")
+	if err != nil {
+		println("client.InitTransaction failed: %v", err)
+		log.Fatalf("client.InitTransaction failed: %v", err)
+	}
+	waitc := make(chan struct{})
+	go func() {
+		for {
+			in, err := stream.Recv()
+			if err == io.EOF {
+				// read done.
+				close(waitc)
+				return
+			}
+			if err != nil {
+				println("client.RouteChat failed: %v", err)
+				log.Fatalf("client.RouteChat failed: %v", err)
+			}
+			println("Got transactions %s", in.Transactions)
+			log.Printf("Got transactions %s", in.Transactions)
+		}
+	}()
+	println("Sending transactions")
+	for _, note := range notes {
+		if err := stream.Send(note); err != nil {
+			println("client.RouteChat: stream.Send(%v) failed: %v", note, err)
+			log.Fatalf("client.RouteChat: stream.Send(%v) failed: %v", note, err)
+		}
+	}
+	println("Closing stream")
+
+	stream.CloseSend()
+	<-waitc
+}
+
 func (cli *grpcClient) OnStart() error {
+	cli.BaseService.Logger.Info("Starting abci.grpcClient", "addr", cli.addr)
+	println("Starting abci.grpcClient", "addr", cli.addr)
 	if err := cli.BaseService.OnStart(); err != nil {
+		println("Error starting abci.grpcClient", "err", err)
 		return err
 	}
+
+	// Start the main loop for processing responses.
+	println("Starting main loop for processing responses")
 
 	// This processes asynchronous request/response messages and dispatches
 	// them to callbacks.
 	go func() {
+		println("Processing asynchronous request/response messages and dispatching them to callbacks")
 		// Use a separate function to use defer for mutex unlocks (this handles panics)
 		callCb := func(reqres *ReqRes) {
 			cli.mtx.Lock()
@@ -87,11 +146,13 @@ func (cli *grpcClient) OnStart() error {
 
 RETRY_LOOP:
 	for {
+		println("RETRY_LOOP")
 		conn, err := grpc.Dial(cli.addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(dialerFunc),
+			// grpc.WithContextDialer(dialerFunc),
 		)
 		if err != nil {
+			println("Error dialing grpc", "err", err)
 			if cli.mustConnect {
 				return err
 			}
@@ -100,16 +161,24 @@ RETRY_LOOP:
 			continue RETRY_LOOP
 		}
 
+		println("Dialed server. Waiting for echo.", "addr", cli.addr)
+
 		cli.Logger.Info("Dialed server. Waiting for echo.", "addr", cli.addr)
 		client := consensus.NewConsensusApiClient(conn)
 		cli.conn = conn
 
 	ENSURE_CONNECTED:
 		for {
-			_, err := client.Echo(context.Background(), &consensus.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
+			println("ENSURE_CONNECTED")
+			// runSendTransaction(client)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			result, err := client.Echo(ctx, &consensus.RequestEcho{Message: "hello"})
+			println("Echo result", "result", result, "err", err.Error())
 			if err == nil {
 				break ENSURE_CONNECTED
 			}
+			println("Error ensuring connection", "err", err)
 			cli.Logger.Error("Echo failed", "err", err)
 			time.Sleep(time.Second * echoRetryIntervalSeconds)
 		}
@@ -180,7 +249,7 @@ func (cli *grpcClient) EchoAsync(msg string) *ReqRes {
 	if err != nil {
 		cli.StopForError(err)
 	}
-	return cli.finishAsyncCall(req, &consensus.Response{Value: &consensus.Response_Echo{Echo: res}},)
+	return cli.finishAsyncCall(req, &consensus.Response{Value: &consensus.Response_Echo{Echo: res}})
 }
 
 // finishAsyncCall creates a ReqRes for an async call, and immediately populates it
