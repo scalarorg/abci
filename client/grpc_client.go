@@ -56,6 +56,7 @@ func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
 }
 
 // runSendTransaction sends a bunch of transactions to the server
+// for testing purposes
 func runSendTransaction(client consensus.ConsensusApiClient) {
 	println("InitTransaction start")
 	notes := []*consensus.ExternalTransaction{
@@ -85,18 +86,15 @@ func runSendTransaction(client consensus.ConsensusApiClient) {
 				return
 			}
 			if err != nil {
-				println("client.RouteChat failed: %v", err)
-				log.Fatalf("client.RouteChat failed: %v", err)
+				log.Fatalf("client.InitTransaction failed: %v", err)
 			}
-			println("Got transactions %s", in.Transactions)
 			log.Printf("Got transactions %s", in.Transactions)
 		}
 	}()
 	println("Sending transactions")
 	for _, note := range notes {
 		if err := stream.Send(note); err != nil {
-			println("client.RouteChat: stream.Send(%v) failed: %v", note, err)
-			log.Fatalf("client.RouteChat: stream.Send(%v) failed: %v", note, err)
+			log.Fatalf("client.InitTransaction: stream.Send(%v) failed: %v", note, err)
 		}
 	}
 	println("Closing stream")
@@ -146,13 +144,12 @@ func (cli *grpcClient) OnStart() error {
 
 RETRY_LOOP:
 	for {
-		println("RETRY_LOOP")
 		conn, err := grpc.Dial(cli.addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			// grpc.WithContextDialer(dialerFunc),
 		)
 		if err != nil {
-			println("Error dialing grpc", "err", err)
+			log.Fatalf("Error dialing grpc", "err: %v", err)
 			if cli.mustConnect {
 				return err
 			}
@@ -161,24 +158,21 @@ RETRY_LOOP:
 			continue RETRY_LOOP
 		}
 
-		println("Dialed server. Waiting for echo.", "addr", cli.addr)
-
 		cli.Logger.Info("Dialed server. Waiting for echo.", "addr", cli.addr)
 		client := consensus.NewConsensusApiClient(conn)
 		cli.conn = conn
 
 	ENSURE_CONNECTED:
 		for {
-			println("ENSURE_CONNECTED")
-			// runSendTransaction(client)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			result, err := client.Echo(ctx, &consensus.RequestEcho{Message: "hello"})
-			println("Echo result", "result", result, "err", err.Error())
+			result, err := client.Echo(ctx, &consensus.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
 			if err == nil {
+				log.Fatalf("Echo result: %v", result.Message)
+				go runSendTransaction(client)
 				break ENSURE_CONNECTED
 			}
-			println("Error ensuring connection", "err", err)
+			log.Fatalf("Echo error: %v", err.Error())
 			cli.Logger.Error("Echo failed", "err", err)
 			time.Sleep(time.Second * echoRetryIntervalSeconds)
 		}

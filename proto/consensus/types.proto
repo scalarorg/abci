@@ -1,17 +1,17 @@
 syntax = "proto3";
-package scalaris.consensus;
+package consensus;
 option go_package = "github.com/scalarorg/cometbft/scalaris/api/consensus";
 
 message Request {
   oneof value {
-    RequestEcho               echo                 = 1;
+    RequestEcho echo = 1;
   }
   reserved 2;
 }
 
 message Response {
   oneof value {
-    ResponseEcho               echo                 = 1;
+    ResponseEcho echo = 1;
   }
   reserved 2;
 }
