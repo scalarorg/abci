@@ -1,5 +1,5 @@
 syntax = "proto3";
-package scalaris.consensus;
+package consensus;
 
 import "proto/consensus/types.proto";
 

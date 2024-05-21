@@ -19,8 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ConsensusApi_InitTransaction_FullMethodName = "/scalaris.consensus.ConsensusApi/InitTransaction"
-	ConsensusApi_Echo_FullMethodName            = "/scalaris.consensus.ConsensusApi/Echo"
+	ConsensusApi_InitTransaction_FullMethodName = "/consensus.ConsensusApi/InitTransaction"
+	ConsensusApi_Echo_FullMethodName            = "/consensus.ConsensusApi/Echo"
 )
 
 // ConsensusApiClient is the client API for ConsensusApi service.
@@ -159,7 +159,7 @@ func _ConsensusApi_Echo_Handler(srv interface{}, ctx context.Context, dec func(i
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ConsensusApi_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "scalaris.consensus.ConsensusApi",
+	ServiceName: "consensus.ConsensusApi",
 	HandlerType: (*ConsensusApiServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
