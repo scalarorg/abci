@@ -74,7 +74,7 @@ func runSendTransaction(client consensus.ConsensusApiClient) {
 	println("InitTransaction end inside")
 	if err != nil {
 		println("client.InitTransaction failed: %v", err)
-		log.Fatalf("client.InitTransaction failed: %v", err)
+		println("client.InitTransaction failed: %v", err)
 	}
 	waitc := make(chan struct{})
 	go func() {
@@ -86,9 +86,9 @@ func runSendTransaction(client consensus.ConsensusApiClient) {
 				return
 			}
 			if err != nil {
-				log.Fatalf("client.InitTransaction failed: %v", err)
+				println("client.InitTransaction failed: %v", err)
 			}
-			log.Printf("Got transactions %s", in.Transactions)
+			println("Got transactions %s", in.Transactions)
 		}
 	}()
 	println("Sending transactions")
@@ -149,7 +149,7 @@ RETRY_LOOP:
 			// grpc.WithContextDialer(dialerFunc),
 		)
 		if err != nil {
-			log.Fatalf("Error dialing grpc", "err: %v", err)
+			println("Error dialing grpc", "err: %v", err)
 			if cli.mustConnect {
 				return err
 			}
@@ -168,11 +168,11 @@ RETRY_LOOP:
 			defer cancel()
 			result, err := client.Echo(ctx, &consensus.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
 			if err == nil {
-				log.Fatalf("Echo result: %v", result.Message)
-				go runSendTransaction(client)
+				println("Echo result: %v", result.Message)
+				// go runSendTransaction(client)
 				break ENSURE_CONNECTED
 			}
-			log.Fatalf("Echo error: %v", err.Error())
+			println("Echo error: %v", err.Error())
 			cli.Logger.Error("Echo failed", "err", err)
 			time.Sleep(time.Second * echoRetryIntervalSeconds)
 		}
