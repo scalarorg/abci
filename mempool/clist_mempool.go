@@ -252,7 +252,7 @@ func (mem *CListMempool) CheckTx(
 	}
 
 	reqRes := mem.proxyAppConn.CheckTxAsync(abci.RequestCheckTx{Tx: tx})
-	reqRes.SetCallback(mem.reqResCb(tx, txInfo.SenderID, txInfo.SenderP2PID, cb))
+	reqRes.SetCallback(mem.ReqResCb(tx, txInfo.SenderID, txInfo.SenderP2PID, cb))
 
 	return nil
 }
@@ -287,7 +287,7 @@ func (mem *CListMempool) globalCb(req *abci.Request, res *abci.Response) {
 // when all other response processing is complete.
 //
 // Used in CheckTx to record PeerID who sent us the tx.
-func (mem *CListMempool) reqResCb(
+func (mem *CListMempool) ReqResCb(
 	tx []byte,
 	peerID uint16,
 	peerP2PID p2p.ID,

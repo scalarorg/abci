@@ -6,30 +6,30 @@ import (
 
 	nm "github.com/scalarorg/abci/node"
 
-	cmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
+	cmtcmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
 	"github.com/cometbft/cometbft/cmd/cometbft/commands/debug"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/libs/cli"
 )
 
 func main() {
-	rootCmd := cmd.RootCmd
+	rootCmd := RootCmd
 	rootCmd.AddCommand(
-		cmd.GenValidatorCmd,
-		cmd.InitFilesCmd,
-		cmd.LightCmd,
-		cmd.ReplayCmd,
-		cmd.ReplayConsoleCmd,
-		cmd.ResetAllCmd,
-		cmd.ResetPrivValidatorCmd,
-		cmd.ResetStateCmd,
-		cmd.ShowValidatorCmd,
-		cmd.TestnetFilesCmd,
-		cmd.ShowNodeIDCmd,
-		cmd.GenNodeKeyCmd,
-		cmd.VersionCmd,
-		cmd.RollbackStateCmd,
-		cmd.CompactGoLevelDBCmd,
+		cmtcmd.GenValidatorCmd,
+		cmtcmd.InitFilesCmd,
+		cmtcmd.LightCmd,
+		cmtcmd.ReplayCmd,
+		cmtcmd.ReplayConsoleCmd,
+		cmtcmd.ResetAllCmd,
+		cmtcmd.ResetPrivValidatorCmd,
+		cmtcmd.ResetStateCmd,
+		cmtcmd.ShowValidatorCmd,
+		cmtcmd.TestnetFilesCmd,
+		cmtcmd.ShowNodeIDCmd,
+		cmtcmd.GenNodeKeyCmd,
+		cmtcmd.VersionCmd,
+		cmtcmd.RollbackStateCmd,
+		cmtcmd.CompactGoLevelDBCmd,
 		debug.DebugCmd,
 		cli.NewCompletionCmd(rootCmd, true),
 	)

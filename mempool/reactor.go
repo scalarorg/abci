@@ -132,11 +132,13 @@ func (memR *Reactor) OnStart() error {
 }
 
 func (memR *Reactor) StartBroadcast(client consensus.ConsensusApi_InitTransactionClient) {
+	memR.Logger.Info("Start Broadcast to the consensus client")
 	for {
 		select {
 		case <-memR.mempool.TxsWaitChan(): // Wait until a tx is available
 			if next := memR.mempool.TxsFront(); next != nil {
 				memTx := next.Value.(*mempoolTx)
+				memR.Logger.Info("Send new tx to the consensus")
 				client.Send(&consensus.ExternalTransaction{
 					Namespace: "AbciAdapter",
 					TxBytes:   memTx.tx,
