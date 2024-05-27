@@ -1419,7 +1419,7 @@ func (n *Node) startPrometheusServer(addr string) *http.Server {
 }
 
 func (n *Node) startconsensusClient() error {
-	logger.Info("Starting scalar consensus client", "addr", config.ScalarisAddr)
+	println("Starting scalar consensus client", "addr", config.ScalarisAddr)
 	err := n.consensusClient.OnStart()
 	if err != nil {
 		logger.Error("Error starting scalaris client", "err", err)
@@ -1447,18 +1447,24 @@ func (n *Node) startconsensusClient() error {
 					logger.Error("client.Recv commited transactions failed: %v", err)
 				}
 				txs := in
-				logger.Info("Got commited transactions %s", txs)
+				if txs != nil || n.blockExec != nil || n.proxyApp != nil {
+					println("Some consensus component is nil")
+					return
+				}
+
+				println("Got commited transactions: ", txs)
+
 				_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
 				if err != nil {
-					logger.Info("Commited block with error %s", err)
+					println("Commited block with error %s", err)
 				}
-				logger.Info("New block height %s", blockHeight)
+				println("New block height %s", blockHeight)
 			}
 		}()
 		client.CloseSend()
 		<-waitc
 	}
-	logger.Info("Started scalar consensus client")
+	println("Started scalar consensus client")
 	return nil
 }
 
