@@ -156,6 +156,6 @@ docker-start: docker-stop build build-docker
 .PHONY: docker-start
 
 docker-stop:
-	docker-compose down
+	docker-compose -f docker-compose-multi.yml down
 	docker rmi scalaris/abci
 .PHONY: docker-stop
