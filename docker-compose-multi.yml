@@ -21,7 +21,7 @@ services:
       - ./build/node0:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:20658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc
+    command: node --proxy_app=tcp://host.docker.internal:20658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
     networks:
       localnet:
         ipv4_address: 192.167.10.2
@@ -46,7 +46,7 @@ services:
       - ./build/node1:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:21658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc
+    command: node --proxy_app=tcp://host.docker.internal:21658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
     networks:
       localnet:
         ipv4_address: 192.167.10.3
@@ -71,7 +71,7 @@ services:
       - ./build/node2:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:22658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc
+    command: node --proxy_app=tcp://host.docker.internal:22658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
     networks:
       localnet:
         ipv4_address: 192.167.10.4
@@ -96,7 +96,7 @@ services:
       - ./build/node3:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:23658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc
+    command: node --proxy_app=tcp://host.docker.internal:23658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
     networks:
       localnet:
         ipv4_address: 192.167.10.5
