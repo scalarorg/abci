@@ -152,7 +152,7 @@ build-docker:
 .PHONY: build-docker
 
 docker-start: docker-stop build build-docker
-	docker-compose up -d
+	docker-compose -f docker-compose-multi.yml up -d
 .PHONY: docker-start
 
 docker-stop:
