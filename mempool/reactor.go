@@ -133,18 +133,45 @@ func (memR *Reactor) OnStart() error {
 
 func (memR *Reactor) StartBroadcast(client consensus.ConsensusApi_InitTransactionClient) {
 	memR.Logger.Info("Start Broadcast to the consensus client")
+	println("Start Broadcast to the consensus client")
+	var next *clist.CElement
+
 	for {
-		select {
-		case <-memR.mempool.TxsWaitChan(): // Wait until a tx is available
-			if next := memR.mempool.TxsFront(); next != nil {
-				memTx := next.Value.(*mempoolTx)
-				memR.Logger.Info("Send new tx to the consensus")
-				client.Send(&consensus.ExternalTransaction{
-					Namespace: "AbciAdapter",
-					TxBytes:   memTx.tx,
-				})
-				continue
+		// In case of both next.NextWaitChan() and peer.Quit() are variable at the same time
+		if !memR.IsRunning() {
+			println("MemR is not running. Retrying...")
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		if next == nil {
+			select {
+			case <-memR.mempool.TxsWaitChan(): // Wait until a tx is available
+				if next = memR.mempool.TxsFront(); next == nil {
+					continue
+				}
+			case <-memR.Quit():
+				return
 			}
+		}
+
+		println("Found new tx in the mempool")
+
+		memTx := next.Value.(*mempoolTx)
+		memR.Logger.Info("Send new tx to the consensus")
+		println("Send new tx to the consensus", "tx", memTx.tx)
+		client.Send(&consensus.ExternalTransaction{
+			Namespace: "AbciAdapter",
+			TxBytes:   memTx.tx,
+		})
+
+		select {
+		case <-next.NextWaitChan():
+			// see the start of the for loop for nil check
+			next = next.Next()
+		case <-memR.Quit():
+			println("MemR is quitting")
+			return
 		}
 	}
 }

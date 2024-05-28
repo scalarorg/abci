@@ -1424,46 +1424,52 @@ func (n *Node) startconsensusClient() error {
 	if err != nil {
 		logger.Error("Error starting scalaris client", "err", err)
 		return err
-	} else {
-		client, err := n.consensusClient.InitTransaction(context.Background())
-		if err != nil {
-			logger.Error("Error Init transaction", "err", err)
-			return err
-		}
-		waitc := make(chan struct{})
-		//Start a routine for rebroadcast mempool transaction to consensus layer
-		go func() {
-			n.mempoolReactor.StartBroadcast(client)
-		}()
-		go func() {
-			for {
-				in, err := client.Recv()
-				if err == io.EOF {
-					// read done.
-					close(waitc)
-					return
-				}
-				if err != nil {
-					logger.Error("client.Recv commited transactions failed: %v", err)
-				}
-				txs := in
-				if txs != nil || n.blockExec != nil || n.proxyApp != nil {
-					println("Some consensus component is nil")
-					return
-				}
-
-				println("Got commited transactions: ", txs)
-
-				_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
-				if err != nil {
-					println("Commited block with error %s", err)
-				}
-				println("New block height %s", blockHeight)
-			}
-		}()
-		client.CloseSend()
-		<-waitc
 	}
+
+	client, err := n.consensusClient.InitTransaction(context.Background())
+	defer client.CloseSend()
+	if err != nil {
+		logger.Error("Error Init transaction", "err", err)
+		return err
+	}
+
+	waitc := make(chan struct{})
+	//Start a routine for rebroadcast mempool transaction to consensus layer
+	go func() {
+		n.mempoolReactor.Start()
+		n.mempoolReactor.StartBroadcast(client)
+	}()
+
+	go func() {
+		for {
+			in, err := client.Recv()
+			if err == io.EOF {
+				// read done.
+				close(waitc)
+				return
+			}
+			if err != nil {
+				println("client.Recv commited transactions failed: ", err.Error())
+				continue
+			}
+			txs := in
+			if txs == nil || n.blockExec == nil || n.proxyApp == nil {
+				println("Some consensus component is nil", txs, n.blockExec, n.proxyApp)
+				continue
+			}
+
+			println("Got commited transactions: ", txs)
+
+			_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
+			if err != nil {
+				println("Commited block with error %s", err.Error())
+				return
+			}
+			println("New block height %s", blockHeight)
+		}
+	}()
+	<-waitc
+
 	println("Started scalar consensus client")
 	return nil
 }
