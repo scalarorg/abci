@@ -1466,7 +1466,7 @@ func (n *Node) startconsensusClient() error {
 				continue
 			}
 
-			println("Got commited transactions: ", txs)
+			println("Got commited transactions: ", len(txs.Transactions))
 
 			_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
 			if err != nil {
