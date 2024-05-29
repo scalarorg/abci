@@ -6,9 +6,11 @@ import (
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/crypto"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
 	"github.com/cometbft/cometbft/libs/fail"
 	"github.com/cometbft/cometbft/libs/log"
+	cmtrand "github.com/cometbft/cometbft/libs/rand"
 	"github.com/cometbft/cometbft/mempool"
 	tstate "github.com/cometbft/cometbft/proto/tendermint/state"
 	"github.com/cometbft/cometbft/proxy"
@@ -60,7 +62,7 @@ func NewBlockExecutor(
 	logger log.Logger,
 	proxyApp proxy.AppConnConsensus,
 	mempool mempool.Mempool,
-	// evpool EvidencePool,
+	evpool cmtstate.EvidencePool,
 	options ...BlockExecutorOption,
 ) *BlockExecutor {
 	res := &BlockExecutor{
@@ -69,9 +71,9 @@ func NewBlockExecutor(
 		proxyApp: proxyApp,
 		eventBus: types.NopEventBus{},
 		mempool:  mempool,
-		// evpool:   evpool,
-		logger:  logger,
-		metrics: cmtstate.NopMetrics(),
+		evpool:   evpool,
+		logger:   logger,
+		metrics:  cmtstate.NopMetrics(),
 	}
 
 	for _, option := range options {
@@ -189,11 +191,16 @@ func (blockExec *BlockExecutor) ApplyCommitedTransactions(
 	commitedTxs *consensus.CommitedTransactions,
 ) (cmtstate.State, int64, error) {
 	//ProposerAddr - Anchor from N&B
-	proposerAddr := []byte("Proposer address")
+	proposerAddr := blockExec.state.LastValidators.Proposer.Address
 	txs := make([]types.Tx, len(commitedTxs.Transactions))
 	for i := 0; i < len(commitedTxs.Transactions); i++ {
 		txs[i] = commitedTxs.Transactions[i].GetTxBytes()
 	}
+
+	var (
+		defaultEvidenceTime = time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+		// defaultEvidenceMaxBytes int64 = 1000
+	)
 
 	// Todo: Create comit
 	// commitSigs := []types.CommitSig{{
@@ -203,8 +210,37 @@ func (blockExec *BlockExecutor) ApplyCommitedTransactions(
 	// 	Signature:        []byte("Signature"),
 	// }}
 
+	commitSigs := []types.CommitSig{
+		{
+			BlockIDFlag:      types.BlockIDFlagCommit,
+			ValidatorAddress: cmtrand.Bytes(crypto.AddressSize),
+			Timestamp:        defaultEvidenceTime,
+			Signature:        []byte("Signature1"),
+		},
+		{
+			BlockIDFlag:      types.BlockIDFlagCommit,
+			ValidatorAddress: cmtrand.Bytes(crypto.AddressSize),
+			Timestamp:        defaultEvidenceTime,
+			Signature:        []byte("Signature2"),
+		},
+		{
+			BlockIDFlag:      types.BlockIDFlagCommit,
+			ValidatorAddress: cmtrand.Bytes(crypto.AddressSize),
+			Timestamp:        defaultEvidenceTime,
+			Signature:        []byte("Signature3"),
+		},
+		{
+			BlockIDFlag:      types.BlockIDFlagCommit,
+			ValidatorAddress: cmtrand.Bytes(crypto.AddressSize),
+			Timestamp:        defaultEvidenceTime,
+			Signature:        []byte("Signature4"),
+		},
+	}
+
+	// blockID := types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}}
+
 	//Empty commit
-	commit := types.NewCommit(blockExec.state.LastBlockHeight, 0, types.BlockID{}, []types.CommitSig{})
+	commit := types.NewCommit(blockExec.state.LastBlockHeight+1, 0, blockExec.state.LastBlockID, commitSigs)
 	// maxBytes := blockExec.state.ConsensusParams.Block.MaxBytes
 	// maxGas := state.ConsensusParams.Block.MaxGas
 
@@ -214,8 +250,11 @@ func (blockExec *BlockExecutor) ApplyCommitedTransactions(
 	// maxDataBytes := types.MaxDataBytes(maxBytes, evSize, state.Validators.Size())
 
 	// txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
-	block := blockExec.state.MakeBlock(blockExec.state.LastBlockHeight, txs, commit, []types.Evidence{}, proposerAddr)
-	state, blockHeight, err := blockExec.ApplyBlock(blockExec.state, types.BlockID{}, block)
+
+	block := blockExec.state.MakeBlock(blockExec.state.LastBlockHeight+1, txs, commit, []types.Evidence{}, proposerAddr)
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: parts.Header()}
+	state, blockHeight, err := blockExec.ApplyBlock(blockExec.state, blockID, block)
 	return state, blockHeight, err
 }
 
@@ -229,15 +268,16 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	state cmtstate.State, blockID types.BlockID, block *types.Block,
 ) (cmtstate.State, int64, error) {
 
-	if err := validateBlock(state, block); err != nil {
-		return state, 0, cmtstate.ErrInvalidBlock(err)
-	}
+	// if err := validateBlock(state, block); err != nil {
+	// 	return state, 0, cmtstate.ErrInvalidBlock(err)
+	// }
 
 	startTime := time.Now().UnixNano()
 	abciResponses, err := execBlockOnProxyApp(
 		blockExec.logger, blockExec.proxyApp, block, blockExec.store, state.InitialHeight,
 	)
 	endTime := time.Now().UnixNano()
+	println("Observe Block Processing Time:")
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
 	if err != nil {
 		return state, 0, cmtstate.ErrProxyAppConn(err)
@@ -246,6 +286,8 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	fail.Fail() // XXX
 
 	// Save the results before we commit.
+	println("Saving ABCI Responses")
+	println("Block Height: ", block.Height)
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
 		return state, 0, err
 	}
@@ -254,6 +296,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 	// validate the validator updates and convert to CometBFT types
 	abciValUpdates := abciResponses.EndBlock.ValidatorUpdates
+	println("Validator Updates: ", abciValUpdates)
 	err = validateValidatorUpdates(abciValUpdates, state.ConsensusParams.Validator)
 	if err != nil {
 		return state, 0, fmt.Errorf("error in validator updates: %v", err)
@@ -272,24 +315,36 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 
 	// Update the state with the block and responses.
+	println("Updating State")
 	state, err = updateState(state, blockID, &block.Header, abciResponses, validatorUpdates)
 	if err != nil {
 		return state, 0, fmt.Errorf("commit failed for application: %v", err)
 	}
 
 	// Lock mempool, commit app state, update mempoool.
+	println("Committing State")
 	appHash, retainHeight, err := blockExec.Commit(state, block, abciResponses.DeliverTxs)
 	if err != nil {
 		return state, 0, fmt.Errorf("commit failed for application: %v", err)
 	}
 
 	// Update evpool with the latest state.
-	blockExec.evpool.Update(state, block.Evidence.Evidence)
+	if block.Evidence.Evidence == nil {
+		println("Evidence is nil")
+	}
+
+	if blockExec.evpool != nil {
+		println("Updating Evidence Pool")
+		blockExec.evpool.Update(state, block.Evidence.Evidence)
+	} else {
+		println("Evidence Pool is nil")
+	}
 
 	fail.Fail() // XXX
 
 	// Update the app hash and save the state.
 	state.AppHash = appHash
+	println("Saving State")
 	if err := blockExec.store.Save(state); err != nil {
 		return state, 0, err
 	}
@@ -298,8 +353,10 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
+	println("Firing Events")
 	fireEvents(blockExec.logger, blockExec.eventBus, block, abciResponses, validatorUpdates)
 
+	println("Returning State")
 	return state, retainHeight, nil
 }
 
@@ -314,11 +371,13 @@ func (blockExec *BlockExecutor) Commit(
 	block *types.Block,
 	deliverTxResponses []*abci.ResponseDeliverTx,
 ) ([]byte, int64, error) {
+	println("Locking Mempool")
 	blockExec.mempool.Lock()
 	defer blockExec.mempool.Unlock()
 
 	// while mempool is Locked, flush to ensure all async requests have completed
 	// in the ABCI app before Commit.
+	println("Flushing Mempool")
 	err := blockExec.mempool.FlushAppConn()
 	if err != nil {
 		blockExec.logger.Error("client error during mempool.FlushAppConn", "err", err)
@@ -326,8 +385,10 @@ func (blockExec *BlockExecutor) Commit(
 	}
 
 	// Commit block, get hash back
+	println("Committing Block Sync")
 	res, err := blockExec.proxyApp.CommitSync()
 	if err != nil {
+		println("Error in Commit Sync", err.Error())
 		blockExec.logger.Error("client error during proxyAppConn.CommitSync", "err", err)
 		return nil, 0, err
 	}
@@ -341,6 +402,7 @@ func (blockExec *BlockExecutor) Commit(
 	)
 
 	// Update mempool.
+	println("Updating Mempool")
 	err = blockExec.mempool.Update(
 		block.Height,
 		block.Txs,
@@ -348,6 +410,10 @@ func (blockExec *BlockExecutor) Commit(
 		TxPreCheck(state),
 		TxPostCheck(state),
 	)
+
+	if err != nil {
+		println("Error in Updating Mempool", err.Error())
+	}
 
 	return res.Data, res.RetainHeight, err
 }

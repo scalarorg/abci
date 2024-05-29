@@ -31,6 +31,7 @@ import (
 	cmtpubsub "github.com/cometbft/cometbft/libs/pubsub"
 	"github.com/cometbft/cometbft/libs/service"
 	mempl "github.com/cometbft/cometbft/mempool"
+	sm "github.com/cometbft/cometbft/state"
 
 	//nolint:staticcheck // SA1019 Priority mempool deprecated but still supported in this release.
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
@@ -523,24 +524,24 @@ func createsmempoolAndMempoolReactor(
 	return mp, reactor
 }
 
-// func createEvidenceReactor(config *cfg.Config, dbProvider DBProvider,
-// 	stateDB dbm.DB, blockStore *store.BlockStore, logger log.Logger,
-// ) (*evidence.Reactor, *evidence.Pool, error) {
-// 	evidenceDB, err := dbProvider(&DBContext{"evidence", config})
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	evidenceLogger := logger.With("module", "evidence")
-// 	evidencePool, err := evidence.NewPool(evidenceDB, sm.NewStore(stateDB, sm.StoreOptions{
-// 		DiscardABCIResponses: config.Storage.DiscardABCIResponses,
-// 	}), blockStore)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	evidenceReactor := evidence.NewReactor(evidencePool)
-// 	evidenceReactor.SetLogger(evidenceLogger)
-// 	return evidenceReactor, evidencePool, nil
-// }
+func createEvidenceReactor(config *Config, dbProvider DBProvider,
+	stateDB dbm.DB, blockStore *store.BlockStore, logger log.Logger,
+) (*evidence.Reactor, *evidence.Pool, error) {
+	evidenceDB, err := dbProvider(&DBContext{"evidence", config})
+	if err != nil {
+		return nil, nil, err
+	}
+	evidenceLogger := logger.With("module", "evidence")
+	evidencePool, err := evidence.NewPool(evidenceDB, sm.NewStore(stateDB, sm.StoreOptions{
+		DiscardABCIResponses: config.Storage.DiscardABCIResponses,
+	}), blockStore)
+	if err != nil {
+		return nil, nil, err
+	}
+	evidenceReactor := evidence.NewReactor(evidencePool)
+	evidenceReactor.SetLogger(evidenceLogger)
+	return evidenceReactor, evidencePool, nil
+}
 
 // func createBlockchainReactor(config *cfg.Config,
 // 	state cmts.State,
@@ -925,11 +926,14 @@ func NewNodeWithContext(ctx context.Context,
 	 */
 	mempool, mempoolReactor := createsmempoolAndMempoolReactor(config, proxyApp, state, memplMetrics, logger)
 
-	//evidenceReactor, evidencePool, err := createEvidenceReactor(config, dbProvider, stateDB, blockStore, logger)
+	evidenceReactor, evidencePool, err := createEvidenceReactor(config, dbProvider, stateDB, blockStore, logger)
 
 	if err != nil {
 		return nil, err
 	}
+
+	evidenceReactor.Start()
+
 	/*
 	* 20240517
 	* Scalaris: Remove block executor component in the execution.go
@@ -945,7 +949,7 @@ func NewNodeWithContext(ctx context.Context,
 		logger.With("module", "state"),
 		proxyApp.Consensus(),
 		mempool,
-		// evidencePool,
+		evidencePool,
 		sstate.BlockExecutorWithMetrics(smMetrics),
 	)
 	// offlineStateSyncHeight := int64(0)
@@ -1442,6 +1446,7 @@ func (n *Node) startconsensusClient() error {
 
 	go func() {
 		for {
+			println("Waiting for commited transactions...")
 			in, err := client.Recv()
 			if err == io.EOF {
 				// read done.
@@ -1450,6 +1455,9 @@ func (n *Node) startconsensusClient() error {
 			}
 			if err != nil {
 				println("client.Recv commited transactions failed: ", err.Error())
+				println("Reconnecting to scalaris consensus client...")
+				time.Sleep(2 * time.Second)
+
 				continue
 			}
 			txs := in
@@ -1462,8 +1470,8 @@ func (n *Node) startconsensusClient() error {
 
 			_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
 			if err != nil {
-				println("Commited block with error %s", err.Error())
-				return
+				println("Commited block with error: ", err.Error())
+				continue
 			}
 			println("New block height %s", blockHeight)
 		}
