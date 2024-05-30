@@ -160,10 +160,16 @@ func (memR *Reactor) StartBroadcast(client consensus.ConsensusApi_InitTransactio
 		memTx := next.Value.(*mempoolTx)
 		memR.Logger.Info("Send new tx to the consensus")
 		println("Send new tx to the consensus", "tx", memTx.tx)
-		client.Send(&consensus.ExternalTransaction{
+		err := client.Send(&consensus.ExternalTransaction{
 			Namespace: "AbciAdapter",
 			TxBytes:   memTx.tx,
 		})
+
+		if err != nil {
+			println("Error sending tx to the consensus", "err", err.Error())
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
 		select {
 		case <-next.NextWaitChan():
