@@ -1,11 +1,13 @@
 syntax = "proto3";
 package consensus;
-
+import "google/protobuf/Empty.proto";
 import "proto/consensus/types.proto";
 
 option go_package = "github.com/scalarorg/cometbft/scalaris/api/consensus";
 
 service ConsensusApi {
-   rpc InitTransaction(stream ExternalTransaction) returns (stream CommitedTransactions) {}
    rpc Echo(RequestEcho) returns (ResponseEcho);
+   rpc GetValidatorInfo(google.protobuf.Empty) returns (ValidatorInfo);
+   rpc GetValidatorState(google.protobuf.Empty) returns (ValidatorState);
+   rpc InitTransaction(stream ExternalTransaction) returns (stream CommitedTransactions) {}
 }

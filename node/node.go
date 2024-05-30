@@ -42,6 +42,7 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	rpccore "github.com/cometbft/cometbft/rpc/core"
 	grpccore "github.com/cometbft/cometbft/rpc/grpc"
+	jsonrpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	cmtstate "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
@@ -55,7 +56,9 @@ import (
 	"github.com/cometbft/cometbft/types"
 	cmttime "github.com/cometbft/cometbft/types/time"
 	"github.com/cometbft/cometbft/version"
+	sc "github.com/scalarorg/abci/consensus"
 	smempool "github.com/scalarorg/abci/mempool"
+	rpc "github.com/scalarorg/abci/rpc"
 	sstate "github.com/scalarorg/abci/state"
 	"github.com/scalarorg/abci/statesync"
 
@@ -114,7 +117,7 @@ func DefaultNewNode(config *Config, sclogger log.Logger) (*Node, error) {
 		DefaultGenesisDocProviderFunc(config),
 		DefaultDBProvider,
 		DefaultMetricsProvider(config.Instrumentation),
-		logger,
+		sclogger,
 	)
 }
 
@@ -348,10 +351,10 @@ type Node struct {
 	stateSyncReactor  *statesync.Reactor      // for hosting and restoring state sync snapshots
 	stateSyncProvider statesync.StateProvider // provides state data for bootstrapping a node
 	stateSyncGenesis  cmts.State              // provides the genesis state for state sync
-	consensusState    *cs.State               // latest consensus state
-	// consensusReactor  *cs.Reactor             // for participating in the consensus
+	consensusState    *sc.State               // latest consensus state
+	consensusReactor  *sc.Reactor             // for participating in the consensus
 	// pexReactor        *pex.Reactor            // for exchanging peer addresses
-	// evidencePool   *evidence.Pool // tracking evidence
+	evidencePool   *evidence.Pool // tracking evidence
 	proxyApp       proxy.AppConns // connection to the application
 	rpcListeners   []net.Listener // rpc servers
 	txIndexer      txindex.TxIndexer
@@ -564,38 +567,38 @@ func createEvidenceReactor(config *Config, dbProvider DBProvider,
 // 	return bcReactor, nil
 // }
 
-// func createConsensusReactor(config *cfg.Config,
-// 	state sm.State,
-// 	blockExec *sm.BlockExecutor,
-// 	blockStore sm.BlockStore,
-// 	mempool mempl.Mempool,
-// 	evidencePool *evidence.Pool,
-// 	privValidator types.PrivValidator,
-// 	csMetrics *cs.Metrics,
-// 	waitSync bool,
-// 	eventBus *types.EventBus,
-// 	consensusLogger log.Logger,
-// ) (*cs.Reactor, *cs.State) {
-// 	consensusState := cs.NewState(
-// 		config.Consensus,
-// 		state.Copy(),
-// 		blockExec,
-// 		blockStore,
-// 		mempool,
-// 		evidencePool,
-// 		cs.StateMetrics(csMetrics),
-// 	)
-// 	consensusState.SetLogger(consensusLogger)
-// 	if privValidator != nil {
-// 		consensusState.SetPrivValidator(privValidator)
-// 	}
-// 	consensusReactor := cs.NewReactor(consensusState, waitSync, cs.ReactorMetrics(csMetrics))
-// 	consensusReactor.SetLogger(consensusLogger)
-// 	// services which will be publishing and/or subscribing for messages (events)
-// 	// consensusReactor will set it on consensusState and blockExecutor
-// 	consensusReactor.SetEventBus(eventBus)
-// 	return consensusReactor, consensusState
-// }
+func createConsensusReactor(config *Config,
+	state sm.State,
+	blockExec *sstate.BlockExecutor,
+	blockStore sm.BlockStore,
+	mempool mempl.Mempool,
+	evidencePool *evidence.Pool,
+	privValidator types.PrivValidator,
+	csMetrics *cs.Metrics,
+	waitSync bool,
+	eventBus *types.EventBus,
+	consensusLogger log.Logger,
+) (*sc.Reactor, *sc.State) {
+	consensusState := sc.NewState(
+		config.Consensus,
+		state.Copy(),
+		blockExec,
+		blockStore,
+		// mempool,
+		// evidencePool,
+		// cs.StateMetrics(csMetrics),
+	)
+	consensusState.SetLogger(consensusLogger)
+	if privValidator != nil {
+		consensusState.SetPrivValidator(privValidator)
+	}
+	consensusReactor := sc.NewReactor(consensusState, waitSync, sc.ReactorMetrics(csMetrics))
+	consensusReactor.SetLogger(consensusLogger)
+	// services which will be publishing and/or subscribing for messages (events)
+	// consensusReactor will set it on consensusState and blockExecutor
+	consensusReactor.SetEventBus(eventBus)
+	return consensusReactor, consensusState
+}
 
 func createTransport(
 	config *cfg.Config,
@@ -978,10 +981,10 @@ func NewNodeWithContext(ctx context.Context,
 	 * main method of consensus is consensusState.receiveRoutine
 	 * block is commit when it receive enough votes, handled by consensusState.addVote
 	 */
-	// consensusReactor, consensusState := createConsensusReactor(
-	// 	config, state, blockExec, blockStore, mempool, evidencePool,
-	// 	privValidator, csMetrics, stateSync || blockSync, eventBus, consensusLogger,
-	// )
+	consensusReactor, consensusState := createConsensusReactor(
+		config, state, blockExec, blockStore, mempool, evidencePool,
+		privValidator, csMetrics, stateSync || blockSync, eventBus, consensusLogger,
+	)
 	err = stateStore.SetOfflineStateSyncHeight(0)
 	if err != nil {
 		panic(fmt.Sprintf("failed to reset the offline state sync height %s", err))
@@ -1082,15 +1085,15 @@ func NewNodeWithContext(ctx context.Context,
 		blockStore:      blockStore,
 		blockExec:       blockExec,
 		//bcReactor:       bcReactor,
-		mempoolReactor: mempoolReactor,
-		mempool:        mempool,
-		//consensusState:   consensusState,
-		//consensusReactor: consensusReactor,
+		mempoolReactor:   mempoolReactor,
+		mempool:          mempool,
+		consensusState:   consensusState,
+		consensusReactor: consensusReactor,
 		stateSyncReactor: stateSyncReactor,
 		stateSync:        stateSync,
 		stateSyncGenesis: state, // Shouldn't be necessary, but need a way to pass the genesis state
 		//pexReactor:       pexReactor,
-		//evidencePool:   evidencePool,
+		evidencePool:   evidencePool,
 		proxyApp:       proxyApp,
 		txIndexer:      txIndexer,
 		indexerService: indexerService,
@@ -1256,10 +1259,10 @@ func (n *Node) ConfigureRPC() error {
 		ProxyAppQuery:   n.proxyApp.Query(),
 		ProxyAppMempool: n.proxyApp.Mempool(),
 
-		StateStore: n.stateStore,
-		BlockStore: n.blockStore,
-		//EvidencePool:   n.evidencePool,
-		// ConsensusState: n.consensusState,
+		StateStore:   n.stateStore,
+		BlockStore:   n.blockStore,
+		EvidencePool: n.evidencePool,
+		//ConsensusState: n.consensusState,
 		//P2PPeers:       n.sw,
 		P2PTransport: n,
 
@@ -1307,11 +1310,13 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 
 	// we may expose the rpc over both a unix and tcp socket
 	listeners := make([]net.Listener, len(listenAddrs))
+	routes := rpccore.Routes
+	routes["status"] = jsonrpc.NewRPCFunc(rpc.Status, "")
 	for i, listenAddr := range listenAddrs {
 		mux := http.NewServeMux()
 		rpcLogger := n.Logger.With("module", "rpc-server")
 		wmLogger := rpcLogger.With("protocol", "websocket")
-		wm := rpcserver.NewWebsocketManager(rpccore.Routes,
+		wm := rpcserver.NewWebsocketManager(routes,
 			rpcserver.OnDisconnect(func(remoteAddr string) {
 				err := n.eventBus.UnsubscribeAll(context.Background(), remoteAddr)
 				if err != nil && err != cmtpubsub.ErrSubscriptionNotFound {
@@ -1323,7 +1328,7 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 		)
 		wm.SetLogger(wmLogger)
 		mux.HandleFunc("/websocket", wm.WebsocketHandler)
-		rpcserver.RegisterRPCFuncs(mux, rpccore.Routes, rpcLogger)
+		rpcserver.RegisterRPCFuncs(mux, routes, rpcLogger)
 		listener, err := rpcserver.Listen(
 			listenAddr,
 			config,

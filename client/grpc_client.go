@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	cmtnet "github.com/cometbft/cometbft/libs/net"
 	"github.com/cometbft/cometbft/libs/service"
@@ -166,9 +167,17 @@ RETRY_LOOP:
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			result, err := client.Echo(ctx, &consensus.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
+			valInfo, err := client.GetValidatorInfo(ctx, &emptypb.Empty{}, grpc.WaitForReady(true))
 			if err == nil {
-				println("Echo result: %v", result.Message)
+				println("Get validator info result: %v", valInfo)
+				// go runSendTransaction(client)
+				break ENSURE_CONNECTED
+			} else {
+				cli.Logger.Info("Get validator error.", "err", err)
+			}
+			echoRes, err := client.Echo(ctx, &consensus.RequestEcho{Message: "Hello Scalaris"}, grpc.WaitForReady(true))
+			if err == nil {
+				println("Echo result: %v", echoRes.Message)
 				// go runSendTransaction(client)
 				break ENSURE_CONNECTED
 			}

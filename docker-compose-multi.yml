@@ -14,14 +14,18 @@ services:
       - PROXY_APP=kvstore 
       - MONIKER=dockernode
       - CHAIN_ID=evmos_9000-1
-    entrypoint: "/usr/bin/start.sh"
     volumes:
       - ./build:/cometbft:Z
       - ./build/scalaris:/usr/local/bin/scalaris:Z
       - ./build/node0:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:20658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
+    entrypoint: "/usr/bin/start.sh"
+    command: [
+      "node", 
+      "--proxy_app=tcp://host.docker.internal:20658", 
+      "--scalaris_addr=tcp://host.docker.internal:8081"
+    ]
     networks:
       localnet:
         ipv4_address: 192.167.10.2
@@ -39,14 +43,18 @@ services:
       - PROXY_APP=kvstore 
       - MONIKER=dockernode
       - CHAIN_ID=evmos_9000-1
-    entrypoint: "/usr/bin/start.sh"
     volumes:
       - ./build:/cometbft:Z
       - ./build/scalaris:/usr/local/bin/scalaris:Z
       - ./build/node1:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:21658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
+    entrypoint: "/usr/bin/start.sh"  
+    command: [
+      "node", 
+      "--proxy_app=tcp://host.docker.internal:21658", 
+      "--scalaris_addr=tcp://host.docker.internal:8081"
+    ]
     networks:
       localnet:
         ipv4_address: 192.167.10.3
@@ -64,14 +72,18 @@ services:
     ports:
       - "26661-26662:26656-26657"
       - "26672:26660"
-    entrypoint: "/usr/bin/start.sh"
     volumes:
       - ./build:/cometbft:Z
       - ./build/scalaris:/usr/local/bin/scalaris:Z
       - ./build/node2:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:22658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
+    entrypoint: "/usr/bin/start.sh"  
+    command: [
+      "node", 
+      "--proxy_app=tcp://host.docker.internal:21658",
+      "--scalaris_addr=tcp://host.docker.internal:8081"
+    ]
     networks:
       localnet:
         ipv4_address: 192.167.10.4
@@ -89,14 +101,18 @@ services:
     ports:
       - "26663-26664:26656-26657"
       - "26673:26660"
-    entrypoint: "/usr/bin/start.sh"
     volumes:
       - ./build:/cometbft:Z
       - ./build/scalaris:/usr/local/bin/scalaris:Z
       - ./build/node3:/scalaris:Z
       - ../evmos/build:/cometbft:Z
       - ./start.sh:/usr/bin/start.sh
-    command: node --proxy_app=tcp://host.docker.internal:23658 --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc --home=/scalaris
+    entrypoint: "/usr/bin/start.sh"  
+    command: [
+      node, 
+      "--proxy_app=tcp://host.docker.internal:23658", 
+      "--scalaris_addr=tcp://host.docker.internal:8081"
+    ]
     networks:
       localnet:
         ipv4_address: 192.167.10.5

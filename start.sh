@@ -22,4 +22,4 @@ BINARY=/usr/local/bin/${BINARY:-scalaris}
 # 	mv "$CMTHOME/config/genesis.json.new" "$CMTHOME/config/genesis.json"
 # fi
 
-"$BINARY" "$@" --home "$CMTHOME"
+"$BINARY" "$@" --home "$CMTHOME"  --rpc.laddr=tcp://0.0.0.0:26657 --abci=grpc
