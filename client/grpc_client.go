@@ -169,7 +169,7 @@ RETRY_LOOP:
 			defer cancel()
 			valInfo, err := client.GetValidatorInfo(ctx, &emptypb.Empty{}, grpc.WaitForReady(true))
 			if err == nil {
-				println("Get validator info result: %v", valInfo)
+				println("Get validator info result: ", "ChainId: ", valInfo.ChainId, ", PubKey: ", valInfo.PubKey)
 				// go runSendTransaction(client)
 				break ENSURE_CONNECTED
 			} else {

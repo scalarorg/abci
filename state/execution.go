@@ -191,7 +191,7 @@ func (blockExec *BlockExecutor) ApplyCommitedTransactions(
 	commitedTxs *consensus.CommitedTransactions,
 ) (cmtstate.State, int64, error) {
 	//ProposerAddr - Anchor from N&B
-	proposerAddr := blockExec.state.LastValidators.Proposer.Address
+	proposerAddr := blockExec.state.Validators.Proposer.Address
 	txs := make([]types.Tx, len(commitedTxs.Transactions))
 	for i := 0; i < len(commitedTxs.Transactions); i++ {
 		txs[i] = commitedTxs.Transactions[i].GetTxBytes()
@@ -240,7 +240,13 @@ func (blockExec *BlockExecutor) ApplyCommitedTransactions(
 	// blockID := types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}}
 
 	//Empty commit
-	commit := types.NewCommit(blockExec.state.LastBlockHeight+1, 0, blockExec.state.LastBlockID, commitSigs)
+	var commit *types.Commit
+	if len(txs) == 0 {
+		println("Empty Commit with height: ", blockExec.state.LastBlockHeight)
+		commit = types.NewCommit(0, 0, types.BlockID{}, nil)
+	} else {
+		commit = types.NewCommit(blockExec.state.LastBlockHeight, 0, blockExec.state.LastBlockID, commitSigs)
+	}
 	// maxBytes := blockExec.state.ConsensusParams.Block.MaxBytes
 	// maxGas := state.ConsensusParams.Block.MaxGas
 
@@ -394,6 +400,7 @@ func (blockExec *BlockExecutor) Commit(
 	}
 
 	// ResponseCommit has no error code - just data
+	println("Committed state: ", "height: ", block.Height, ", app_hash: ", fmt.Sprintf("%X", res.Data), "num_txs", len(block.Txs))
 	blockExec.logger.Info(
 		"committed state",
 		"height", block.Height,

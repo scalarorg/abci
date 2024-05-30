@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	"github.com/scalarorg/abci/api/proto/consensus"
 	sclient "github.com/scalarorg/abci/client"
 
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -1443,6 +1444,23 @@ func (n *Node) startconsensusClient() error {
 	}
 
 	waitc := make(chan struct{})
+
+	// Propose first block
+	go func() {
+		if n.blockStore.Height() > 0 {
+			return
+		}
+
+		println("Propose first block")
+		_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), &consensus.CommitedTransactions{Transactions: []*consensus.ExternalTransaction{}})
+
+		if err != nil {
+			println("Commited block with error: ", err.Error())
+			return
+		}
+		println("New block height: ", blockHeight)
+	}()
+
 	//Start a routine for rebroadcast mempool transaction to consensus layer
 	go func() {
 		n.mempoolReactor.Start()
