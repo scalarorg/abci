@@ -24,7 +24,9 @@ services:
     command: [
       "node", 
       "--proxy_app=tcp://host.docker.internal:20658", 
-      "--scalaris_addr=host.docker.internal:8081"
+      "--scalaris_addr=host.docker.internal:8081",
+      "--rpc.laddr=tcp://0.0.0.0:26657",
+      "--abci=grpc"
     ]
     networks:
       localnet:
@@ -53,7 +55,9 @@ services:
     command: [
       "node", 
       "--proxy_app=tcp://host.docker.internal:21658", 
-      "--scalaris_addr=host.docker.internal:8082"
+      "--scalaris_addr=host.docker.internal:8082",
+      "--rpc.laddr=tcp://0.0.0.0:26657",
+      "--abci=grpc"
     ]
     networks:
       localnet:
@@ -82,7 +86,9 @@ services:
     command: [
       "node", 
       "--proxy_app=tcp://host.docker.internal:22658",
-      "--scalaris_addr=host.docker.internal:8083"
+      "--scalaris_addr=host.docker.internal:8083",
+      "--rpc.laddr=tcp://0.0.0.0:26657",
+      "--abci=grpc"
     ]
     networks:
       localnet:
@@ -111,7 +117,9 @@ services:
     command: [
       node, 
       "--proxy_app=tcp://host.docker.internal:23658", 
-      "--scalaris_addr=host.docker.internal:8084"
+      "--scalaris_addr=host.docker.internal:8084",
+      "--rpc.laddr=tcp://0.0.0.0:26657",
+      "--abci=grpc"
     ]
     networks:
       localnet:

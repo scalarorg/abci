@@ -929,6 +929,7 @@ func NewNodeWithContext(ctx context.Context,
 	* Scalaris: Modify mempool, mempoolReactor -> scalarisClient for listen input transactions
 	 */
 	mempool, mempoolReactor := createsmempoolAndMempoolReactor(config, proxyApp, state, memplMetrics, logger)
+	mempoolReactor.SetLogger(logger.With("module", "mempool-reactor"))
 
 	evidenceReactor, evidencePool, err := createEvidenceReactor(config, dbProvider, stateDB, blockStore, logger)
 
@@ -1070,6 +1071,7 @@ func NewNodeWithContext(ctx context.Context,
 	// 	logger.Info("Scalaris address not providedddd, skipping scalaris client start")
 	// }
 	client := sclient.NewGRPCClient(config.ScalarisAddr, true)
+	client.SetLogger(logger.With("module", "grpc-scalaris"))
 	// Start grpc
 	node := &Node{
 		config:        config,
@@ -1136,7 +1138,7 @@ func (n *Node) OnStart() error {
 		n.config.Instrumentation.PrometheusListenAddr != "" {
 		n.prometheusSrv = n.startPrometheusServer(n.config.Instrumentation.PrometheusListenAddr)
 	}
-	err := n.startconsensusClient()
+	err := n.startconsensusClient(n.Logger.With("module", "scalaris"))
 	if err != nil {
 		n.Logger.Error("Start consensus client with error %s", err)
 		return err
@@ -1271,7 +1273,7 @@ func (n *Node) ConfigureRPC() error {
 		GenDoc:       n.genesisDoc,
 		TxIndexer:    n.txIndexer,
 		BlockIndexer: n.blockIndexer,
-		//ConsensusReactor: n.consensusReactor,
+		// ConsensusReactor: n.consensusReactor,
 		EventBus: n.eventBus,
 		Mempool:  n.mempool,
 
@@ -1279,6 +1281,13 @@ func (n *Node) ConfigureRPC() error {
 
 		Config: *n.config.RPC,
 	})
+
+	rpc.SetEnvironment(&rpc.Environment{
+		StateStore: n.stateStore,
+		BlockStore: n.blockStore,
+		PubKey:     pubKey,
+	})
+
 	if err := rpccore.InitGenesisChunks(); err != nil {
 		return err
 	}
@@ -1313,6 +1322,11 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 	listeners := make([]net.Listener, len(listenAddrs))
 	routes := rpccore.Routes
 	routes["status"] = jsonrpc.NewRPCFunc(rpc.Status, "")
+	routes["consensus_params"] = jsonrpc.NewRPCFunc(rpc.ConsensusParams, "heightPtr")
+	routes["validators"] = jsonrpc.NewRPCFunc(rpc.Validators, "heightPtr,pagePtr,perPagePtr")
+	routes["dump_consensus_state"] = jsonrpc.NewRPCFunc(rpc.DumpConsensusState, "")
+	routes["consensus_state"] = jsonrpc.NewRPCFunc(rpc.ConsensusState, "")
+
 	for i, listenAddr := range listenAddrs {
 		mux := http.NewServeMux()
 		rpcLogger := n.Logger.With("module", "rpc-server")
@@ -1428,40 +1442,40 @@ func (n *Node) startPrometheusServer(addr string) *http.Server {
 	return srv
 }
 
-func (n *Node) startconsensusClient() error {
-	println("Starting scalar consensus client", "addr", config.ScalarisAddr)
+func (n *Node) startconsensusClient(scalarisLog log.Logger) error {
 	err := n.consensusClient.OnStart()
 	if err != nil {
-		logger.Error("Error starting scalaris client", "err", err)
+		scalarisLog.Error("Error starting scalaris client", err)
 		return err
 	}
 
 	client, err := n.consensusClient.InitTransaction(context.Background())
 	defer client.CloseSend()
 	if err != nil {
-		logger.Error("Error Init transaction", "err", err)
+		scalarisLog.Error("Error Init transaction: ", err)
 		return err
 	}
 
 	waitc := make(chan struct{})
 
-	// Propose first block
+	// Propose very first block
 	go func() {
 		if n.blockStore.Height() > 0 {
 			return
 		}
 
-		println("Propose first block")
-		_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), &consensus.CommitedTransactions{Transactions: []*consensus.ExternalTransaction{}})
+		_, _, err := n.blockExec.ApplyCommitedTransactions(
+			scalarisLog, n.proxyApp.Consensus(),
+			&consensus.CommitedTransactions{Transactions: []*consensus.ExternalTransaction{}},
+			n.blockStore)
 
 		if err != nil {
-			println("Commited block with error: ", err.Error())
+			scalarisLog.Error("Commited block with error: ", "err", err.Error())
 			return
 		}
-		println("New block height: ", blockHeight)
 	}()
 
-	//Start a routine for rebroadcast mempool transaction to consensus layer
+	// Start a routine for rebroadcast mempool transaction to consensus layer
 	go func() {
 		n.mempoolReactor.Start()
 		n.mempoolReactor.StartBroadcast(client)
@@ -1469,7 +1483,6 @@ func (n *Node) startconsensusClient() error {
 
 	go func() {
 		for {
-			println("Waiting for commited transactions...")
 			in, err := client.Recv()
 			if err == io.EOF {
 				// read done.
@@ -1477,8 +1490,19 @@ func (n *Node) startconsensusClient() error {
 				return
 			}
 			if err != nil {
-				println("client.Recv commited transactions failed: ", err.Error())
-				println("Reconnecting to scalaris consensus client...")
+				scalarisLog.Error("client.Recv commited transactions failed: ", err.Error())
+				scalarisLog.Info("Reconnecting to scalaris consensus client...")
+
+				err := n.consensusClient.OnStart()
+				if err != nil {
+					scalarisLog.Error("Error starting scalaris client", "err", err)
+				}
+
+				client, err = n.consensusClient.InitTransaction(context.Background())
+
+				if err != nil {
+					scalarisLog.Error("Error Init transaction", "err", err)
+				}
 				time.Sleep(2 * time.Second)
 
 				continue
@@ -1489,19 +1513,18 @@ func (n *Node) startconsensusClient() error {
 				continue
 			}
 
-			println("Got commited transactions: ", len(txs.Transactions))
+			scalarisLog.Info("Got commited transactions", "txs_count", len(txs.Transactions))
 
-			_, blockHeight, err := n.blockExec.ApplyCommitedTransactions(n.Logger, n.proxyApp.Consensus(), in)
+			_, _, err = n.blockExec.ApplyCommitedTransactions(scalarisLog, n.proxyApp.Consensus(), in, n.blockStore)
 			if err != nil {
-				println("Commited block with error: ", err.Error())
+				scalarisLog.Error("Commited block with error: ", "err", err.Error())
 				continue
 			}
-			println("New block height %s", blockHeight)
 		}
 	}()
 	<-waitc
 
-	println("Started scalar consensus client")
+	println("Stop scalar consensus client")
 	return nil
 }
 

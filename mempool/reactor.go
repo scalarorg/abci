@@ -133,7 +133,6 @@ func (memR *Reactor) OnStart() error {
 
 func (memR *Reactor) StartBroadcast(client consensus.ConsensusApi_InitTransactionClient) {
 	memR.Logger.Info("Start Broadcast to the consensus client")
-	println("Start Broadcast to the consensus client")
 	var next *clist.CElement
 
 	for {
@@ -158,8 +157,7 @@ func (memR *Reactor) StartBroadcast(client consensus.ConsensusApi_InitTransactio
 		println("Found new tx in the mempool")
 
 		memTx := next.Value.(*mempoolTx)
-		memR.Logger.Info("Send new tx to the consensus")
-		println("Send new tx to the consensus", "tx", memTx.tx)
+		memR.Logger.Info("Send new tx to the Scalar consensus")
 		err := client.Send(&consensus.ExternalTransaction{
 			Namespace: "AbciAdapter",
 			TxBytes:   memTx.tx,

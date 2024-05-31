@@ -3,15 +3,12 @@ package client
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	cmtnet "github.com/cometbft/cometbft/libs/net"
 	"github.com/cometbft/cometbft/libs/service"
@@ -56,69 +53,16 @@ func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
 	return cmtnet.Connect(addr)
 }
 
-// runSendTransaction sends a bunch of transactions to the server
-// for testing purposes
-func runSendTransaction(client consensus.ConsensusApiClient) {
-	println("InitTransaction start")
-	notes := []*consensus.ExternalTransaction{
-		{Namespace: "1", TxBytes: []byte("1")},
-		{Namespace: "2", TxBytes: []byte("2")},
-		{Namespace: "3", TxBytes: []byte("3")},
-		{Namespace: "4", TxBytes: []byte("4")},
-		{Namespace: "5", TxBytes: []byte("5")},
-		{Namespace: "6", TxBytes: []byte("6")},
-		{Namespace: "7", TxBytes: []byte("7")},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	stream, err := client.InitTransaction(ctx)
-	println("InitTransaction end inside")
-	if err != nil {
-		println("client.InitTransaction failed: %v", err)
-		println("client.InitTransaction failed: %v", err)
-	}
-	waitc := make(chan struct{})
-	go func() {
-		for {
-			in, err := stream.Recv()
-			if err == io.EOF {
-				// read done.
-				close(waitc)
-				return
-			}
-			if err != nil {
-				println("client.InitTransaction failed: %v", err)
-			}
-			println("Got transactions %s", in.Transactions)
-		}
-	}()
-	println("Sending transactions")
-	for _, note := range notes {
-		if err := stream.Send(note); err != nil {
-			log.Fatalf("client.InitTransaction: stream.Send(%v) failed: %v", note, err)
-		}
-	}
-	println("Closing stream")
-
-	stream.CloseSend()
-	<-waitc
-}
-
 func (cli *grpcClient) OnStart() error {
 	cli.BaseService.Logger.Info("Starting abci.grpcClient", "addr", cli.addr)
-	println("Starting abci.grpcClient", "addr", cli.addr)
 	if err := cli.BaseService.OnStart(); err != nil {
 		println("Error starting abci.grpcClient", "err", err)
 		return err
 	}
 
-	// Start the main loop for processing responses.
-	println("Starting main loop for processing responses")
-
 	// This processes asynchronous request/response messages and dispatches
 	// them to callbacks.
 	go func() {
-		println("Processing asynchronous request/response messages and dispatching them to callbacks")
 		// Use a separate function to use defer for mutex unlocks (this handles panics)
 		callCb := func(reqres *ReqRes) {
 			cli.mtx.Lock()
@@ -167,18 +111,17 @@ RETRY_LOOP:
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			valInfo, err := client.GetValidatorInfo(ctx, &emptypb.Empty{}, grpc.WaitForReady(true))
-			if err == nil {
-				println("Get validator info result: ", "ChainId: ", valInfo.ChainId, ", PubKey: ", valInfo.PubKey)
-				// go runSendTransaction(client)
-				break ENSURE_CONNECTED
-			} else {
-				cli.Logger.Info("Get validator error.", "err", err)
-			}
-			echoRes, err := client.Echo(ctx, &consensus.RequestEcho{Message: "Hello Scalaris"}, grpc.WaitForReady(true))
-			if err == nil {
-				println("Echo result: %v", echoRes.Message)
-				// go runSendTransaction(client)
+			// valInfo, err := client.GetValidatorInfo(ctx, &emptypb.Empty{}, grpc.WaitForReady(true))
+			// if err == nil {
+			// 	println("Get validator info result: ", "ChainId: ", valInfo.ChainId, ", PubKey: ", valInfo.PubKey)
+			// 	// go runSendTransaction(client)
+			// 	break ENSURE_CONNECTED
+			// } else {
+			// 	cli.Logger.Info("Get validator error.", "err", err)
+			// }
+			echoMessage := "Hello Scalaris"
+			echoRes, err := client.Echo(ctx, &consensus.RequestEcho{Message: echoMessage}, grpc.WaitForReady(true))
+			if err == nil && echoRes.Message == echoMessage {
 				break ENSURE_CONNECTED
 			}
 			println("Echo error: %v", err.Error())

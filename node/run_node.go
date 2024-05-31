@@ -134,6 +134,7 @@ func NewRunNodeCmd(nodeProvider Provider) *cobra.Command {
 			config.ScalarisAddr = viperCtx.GetString("scalaris_addr")
 			config.ProxyApp = viperCtx.GetString("proxy_app")
 			config.ABCI = viperCtx.GetString("abci")
+			config.RPC.ListenAddress = viperCtx.GetString("rpc.laddr")
 
 			logger.Info("Starting node", "config", config)
 			n, err := nodeProvider(config, logger)
